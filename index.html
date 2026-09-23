@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090b12" />
+  <title>ROLL / TWO — Dice Night</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="#top">ROLL<span>/</span>TWO</a>
+    <div class="topbar-actions"><div class="topbar-meta"><span class="live-dot"></span> ONLINE TABLE <b>•</b> <span class="token-balance" title="Jumlah token yang kamu miliki"><span class="token-icon" aria-hidden="true">T</span><span class="token-copy"><small>Saldo kamu</small><strong id="tokenBalance">0</strong><small>tokens</small></span></span></div><button class="admin-button" id="adminButton">Admin</button></div>
+  </header>
+
+  <main id="top" class="game-shell">
+    <section class="hero-copy">
+      <p class="eyebrow">A game of chance / 01</p>
+      <h1>Make your<br><em>moment.</em></h1>
+      <p class="intro">Dua dadu. Satu meja. Giliranmu menentukan segalanya.</p>
+    </section>
+
+    <section class="setup glass-panel" id="setupPanel">
+      <div class="section-heading"><span>ONLINE</span><h2>Join a table</h2></div>
+      <div class="room-controls"><label>Nama kamu<input id="roomPlayerName" maxlength="16" placeholder="Contoh: Alex" /></label><label>Kode room<input id="roomCode" maxlength="6" placeholder="ABC123" /></label><button class="secondary-button" id="createRoom">Buat room</button><button class="secondary-button" id="joinRoom">Gabung room</button><button class="primary-button" id="startOnlineGame">Mulai untuk semua pemain <span>→</span></button></div><p class="admin-error" id="roomError"></p><p class="room-status" id="roomStatus">Buat room baru atau masukkan kode room dari pemain lain.</p>
+      <div class="section-heading"><span>01</span><h2>Set the table</h2></div>
+      <label for="playerCount">Jumlah pemain</label>
+      <div class="choice-grid player-choice" id="playerCount">
+        <button class="choice active" data-players="2">02</button>
+        <button class="choice" data-players="3">03</button>
+        <button class="choice" data-players="4">04</button>
+        <button class="choice" data-players="5">05</button>
+        <button class="choice" data-players="6">06</button>
+      </div>
+      <label for="roundCount">Jumlah ronde</label>
+      <div class="round-row" id="roundCount">
+        <button class="round-choice" data-rounds="3">3 Ronde</button>
+        <button class="round-choice active" data-rounds="5">5 Ronde</button>
+        <button class="round-choice" data-rounds="7">7 Ronde</button>
+      </div>
+      <div class="economy-row">
+        <label>Token awal per pemain<input id="startingTokens" type="number" min="10" step="10" value="500" /></label>
+        <label>Taruhan per ronde<input id="betAmount" type="number" min="1" step="5" value="25" /></label>
+      </div>
+      <p class="rules-note">Setiap ronde semua pemain membayar taruhan. Pemenang ronde mengambil seluruh pot.</p>
+      <div class="name-fields" id="nameFields"></div>
+      <button class="primary-button" id="startButton">Mulai permainan lokal <span>→</span></button>
+    </section>
+
+    <section class="game-view hidden" id="gameView">
+      <div class="game-topline">
+        <div><p class="eyebrow">Round <span id="roundLabel">01</span> / <span id="totalRoundsLabel">05</span> <b class="pot-label">Pot <span id="potLabel">0</span> T</b></p><h2 id="turnLabel">Player 1's turn</h2></div>
+        <button class="text-button" id="resetButton">Exit game ↗</button>
+      </div>
+      <div class="table glass-panel">
+        <div class="turn-chip"><span class="live-dot"></span><span id="statusLabel">Ready to roll</span></div>
+        <div class="dice-stage" id="diceStage">
+          <div class="die-wrap"><div class="die" id="dieOne"></div><span>DIE 01</span></div>
+          <div class="plus">+</div>
+          <div class="die-wrap"><div class="die" id="dieTwo"></div><span>DIE 02</span></div>
+        </div>
+        <div class="roll-result"><span>Total</span><strong id="totalLabel">—</strong><small id="bonusLabel"></small></div>
+        <button class="primary-button roll-button" id="rollButton">Roll the dice <span>↗</span></button>
+      </div>
+      <div class="score-layout">
+        <div class="score-panel glass-panel"><div class="section-heading"><span>02</span><h2>Scoreboard</h2></div><div id="scoreboard"></div></div>
+        <div class="history-panel glass-panel"><div class="section-heading"><span>03</span><h2>Last rolls</h2></div><div id="history"><p class="empty-state">Belum ada lemparan.</p></div></div>
+      </div>
+    </section>
+  </main>
+  <footer><span>ROLL/TWO</span> — Made for good company.</footer>
+  <div class="modal-backdrop hidden" id="adminModal"><section class="admin-modal glass-panel"><button class="close-button" id="closeAdmin">×</button><p class="eyebrow">Control room</p><h2>Admin panel</h2><p class="admin-muted">Tambahkan token secara manual ke akun pemain.</p><label>Password admin<input id="adminPassword" type="password" autocomplete="off" placeholder="Masukkan password" /></label><button class="primary-button" id="loginAdmin">Masuk ke admin <span>→</span></button><p class="admin-error" id="adminError"></p><div class="admin-content hidden" id="adminContent"><div class="admin-stat"><span>ID pemain aktif</span><strong id="adminPlayerId">-</strong></div><label>ID pemain<input id="topupPlayerId" placeholder="Tempel ID pemain" /></label><label>Jumlah token<input id="topupTokens" type="number" min="1" step="1" placeholder="Contoh: 500" /></label><button class="primary-button" id="manualTopup">Tambah token <span>→</span></button><div class="admin-stat"><span>Total token di meja</span><strong id="adminTotalTokens">0</strong></div><button class="secondary-button" id="resetTokens">Reset token pemain</button><button class="secondary-button" id="closeAdminPanel">Tutup panel</button></div></section></div>
+  <script src="script.js" defer></script>
+</body>
+</html>
