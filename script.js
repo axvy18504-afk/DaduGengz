@@ -5,6 +5,7 @@ localStorage.setItem("rollTwoPlayerId", playerId);
 let onlineRoom = null;
 let onlinePoll = null;
 let onlineRollInFlight = false;
+let roomRequestInFlight = false;
 let onlineHistory = [];
 let onlineLastRollAt = 0;
 
