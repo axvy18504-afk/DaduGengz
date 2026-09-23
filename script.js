@@ -4,6 +4,7 @@ const playerId = localStorage.getItem("rollTwoPlayerId") || crypto.randomUUID();
 localStorage.setItem("rollTwoPlayerId", playerId);
 let onlineRoom = null;
 let onlinePoll = null;
+let onlineRollInFlight = false;
 
 const game = {
   players: 2,
@@ -122,11 +123,29 @@ async function syncOnlineRoom() {
 }
 
 async function rollOnlineDice() {
-  if (!onlineRoom) return;
-  const response = await fetch(`/api/rooms/${onlineRoom.code}/roll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
-  const data = await response.json();
-  if (!response.ok) { $("#statusLabel").textContent = data.error; return; }
-  renderOnlineRoom(data);
+  if (!onlineRoom || onlineRollInFlight) return;
+  onlineRollInFlight = true;
+  const button = $("#rollButton");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  button.disabled = true;
+  $("#statusLabel").textContent = "Rolling...";
+  $("#dieOne").classList.add("rolling");
+  $("#dieTwo").classList.add("rolling");
+  try {
+    const response = await fetch(`/api/rooms/${onlineRoom.code}/roll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }), signal: controller.signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Roll gagal.");
+    renderOnlineRoom(data);
+  } catch (error) {
+    $("#statusLabel").textContent = error.name === "AbortError" ? "Server terlalu lama merespons." : error.message;
+    button.disabled = false;
+  } finally {
+    clearTimeout(timeout);
+    $("#dieOne").classList.remove("rolling");
+    $("#dieTwo").classList.remove("rolling");
+    onlineRollInFlight = false;
+  }
 }
 
 function beginGame() {
@@ -288,7 +307,6 @@ function resetTokens() {
 createPlayers();
 setupChoiceEvents();
 $("#startButton").addEventListener("click", beginGame);
-$("#rollButton").addEventListener("click", () => { if (!onlineRoom) rollDice(); });
 $("#resetButton").addEventListener("click", resetToSetup);
 $("#adminButton").addEventListener("click", openAdmin);
 $("#closeAdmin").addEventListener("click", () => $("#adminModal").classList.add("hidden"));
@@ -309,7 +327,7 @@ $("#startOnlineGame").addEventListener("click", async () => {
   if (!response.ok) { $("#roomError").textContent = data.error; return; }
   renderOnlineRoom(data);
 });
-$("#rollButton").addEventListener("click", () => { if (onlineRoom) rollOnlineDice(); });
+$("#rollButton").addEventListener("click", () => { if (onlineRoom) rollOnlineDice(); else rollDice(); });
 $("#adminPlayerId").textContent = playerId;
 $("#topupPlayerId").value = playerId;
 $("#manualTopup").addEventListener("click", async () => {
