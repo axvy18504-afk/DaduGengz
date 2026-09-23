@@ -5,6 +5,8 @@ localStorage.setItem("rollTwoPlayerId", playerId);
 let onlineRoom = null;
 let onlinePoll = null;
 let onlineRollInFlight = false;
+let onlineHistory = [];
+let onlineLastRollAt = 0;
 
 const game = {
   players: 2,
@@ -13,6 +15,7 @@ const game = {
   currentRound: 1,
   rolling: false,
   finished: false,
+  over: false,
   list: [],
   history: [],
   startingTokens: 500,
@@ -82,44 +85,81 @@ function renderHistory() {
 
 function renderOnlineRoom(room) {
   onlineRoom = room;
-  game.list = room.players.map((player) => ({ ...player, tokens: 0 }));
+  game.list = room.players.map((player) => ({ ...player }));
   game.currentPlayer = room.currentPlayer;
   game.currentRound = room.currentRound;
   game.rounds = room.rounds;
   game.finished = room.finished;
   $("#roomCode").value = room.code;
+  $("#setupPanel").classList.toggle("hidden", room.started);
+  $("#startOnlineGame").disabled = room.started;
   $("#roomStatus").textContent = room.started ? `Room ${room.code} aktif. Giliran: ${room.players[room.currentPlayer]?.name || "selesai"}.` : `Room ${room.code} menunggu pemain (${room.players.length}/6).`;
   $("#adminTotalTokens").textContent = room.players.reduce((total, player) => total + player.score, 0);
-  if (room.lastRoll) {
+  if (room.lastRoll && room.lastRoll.at !== onlineLastRollAt) {
+    onlineLastRollAt = room.lastRoll.at;
     setDie($("#dieOne"), room.lastRoll.first);
     setDie($("#dieTwo"), room.lastRoll.second);
     $("#totalLabel").textContent = room.lastRoll.total;
     $("#statusLabel").textContent = `${room.lastRoll.player} mendapat ${room.lastRoll.total}`;
-    game.history = [{ player: room.lastRoll.player, first: room.lastRoll.first, second: room.lastRoll.second, total: room.lastRoll.total }];
+    onlineHistory.unshift({ player: room.lastRoll.player, first: room.lastRoll.first, second: room.lastRoll.second, total: room.lastRoll.total });
+    onlineHistory = onlineHistory.slice(0, 6);
+    game.history = onlineHistory;
     renderHistory();
   }
   $("#roundLabel").textContent = String(room.currentRound).padStart(2, "0");
   $("#totalRoundsLabel").textContent = String(room.rounds).padStart(2, "0");
   $("#turnLabel").textContent = room.finished ? "Permainan selesai" : `${room.players[room.currentPlayer]?.name || "Player"}'s turn`;
-  $("#rollButton").disabled = !room.started || room.finished || room.players[room.currentPlayer]?.id !== playerId;
+  if (!onlineRollInFlight) {
+    const yourTurn = room.players[room.currentPlayer]?.id === playerId;
+    if (room.finished) {
+      $("#rollButton").innerHTML = 'Selesai <span>✓</span>';
+      $("#rollButton").disabled = true;
+    } else {
+      $("#rollButton").innerHTML = yourTurn ? 'Roll the dice <span>↗</span>' : 'Menunggu pemain lain…';
+      $("#rollButton").disabled = !room.started || !yourTurn;
+    }
+  }
   renderScoreboard();
 }
 
 async function requestRoom(url, body) {
+  if (roomRequestInFlight) return;
+  roomRequestInFlight = true;
+  try {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error);
+  onlineHistory = [];
+  onlineLastRollAt = 0;
+  game.history = [];
   renderOnlineRoom(data.room);
   $("#setupPanel").classList.add("hidden");
   $("#gameView").classList.remove("hidden");
+  $("#setupPanel").classList.remove("hidden");
   if (onlinePoll) clearInterval(onlinePoll);
   onlinePoll = setInterval(syncOnlineRoom, 1000);
+  } finally {
+    roomRequestInFlight = false;
+  }
+}
+
+function leaveOnlineRoom() {
+  if (onlinePoll) clearInterval(onlinePoll);
+  onlinePoll = null;
+  onlineRoom = null;
+  onlineHistory = [];
+  onlineLastRollAt = 0;
+  onlineRollInFlight = false;
 }
 
 async function syncOnlineRoom() {
   if (!onlineRoom) return;
-  const response = await fetch(`/api/rooms/${onlineRoom.code}`);
-  if (response.ok) renderOnlineRoom(await response.json());
+  try {
+    const response = await fetch(`/api/rooms/${onlineRoom.code}`);
+    if (response.ok) renderOnlineRoom(await response.json());
+  } catch (_error) {
+    $("#roomStatus").textContent = "Koneksi terputus. Mencoba menyambung kembali...";
+  }
 }
 
 async function rollOnlineDice() {
@@ -136,6 +176,9 @@ async function rollOnlineDice() {
     const response = await fetch(`/api/rooms/${onlineRoom.code}/roll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }), signal: controller.signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Roll gagal.");
+    onlineRollInFlight = false;
+    $("#dieOne").classList.remove("rolling");
+    $("#dieTwo").classList.remove("rolling");
     renderOnlineRoom(data);
   } catch (error) {
     $("#statusLabel").textContent = error.name === "AbortError" ? "Server terlalu lama merespons." : error.message;
@@ -163,6 +206,7 @@ function beginGame() {
   game.pot = 0;
   game.roundScores = game.list.map(() => 0);
   game.finished = false;
+  game.over = false;
   $("#setupPanel").classList.add("hidden");
   $("#gameView").classList.remove("hidden");
   $("#totalRoundsLabel").textContent = String(game.rounds).padStart(2, "0");
@@ -254,24 +298,26 @@ function nextTurn() {
 
 function finishGame() {
   game.finished = true;
+  game.over = true;
   const topScore = Math.max(...game.list.map((player) => player.score));
   const winners = game.list.filter((player) => player.score === topScore).map((player) => player.name);
   $("#turnLabel").textContent = winners.length > 1 ? "It's a tie!" : `${winners[0]} wins!`;
   $("#statusLabel").textContent = `Final score: ${topScore} points`;
-  $("#rollButton").textContent = "Play again ↗";
+  $("#rollButton").innerHTML = 'Play again <span>↗</span>';
   $("#rollButton").disabled = false;
-  $("#rollButton").onclick = resetToSetup;
   renderScoreboard();
 }
 
 function resetToSetup() {
   game.finished = false;
   game.rolling = false;
+  game.over = false;
+  leaveOnlineRoom();
   $("#gameView").classList.add("hidden");
   $("#setupPanel").classList.remove("hidden");
+  $("#roomError").textContent = "";
   $("#rollButton").innerHTML = 'Roll the dice <span>↗</span>';
   $("#rollButton").disabled = false;
-  $("#rollButton").onclick = rollDice;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -322,12 +368,23 @@ $("#joinRoom").addEventListener("click", async () => {
 });
 $("#startOnlineGame").addEventListener("click", async () => {
   if (!onlineRoom) { $("#roomError").textContent = "Buat atau gabung room dulu."; return; }
-  const response = await fetch(`/api/rooms/${onlineRoom.code}/start`, { method: "POST" });
-  const data = await response.json();
-  if (!response.ok) { $("#roomError").textContent = data.error; return; }
-  renderOnlineRoom(data);
+  const button = $("#startOnlineGame");
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/rooms/${onlineRoom.code}/start`, { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Game tidak dapat dimulai.");
+    renderOnlineRoom(data);
+  } catch (error) {
+    $("#roomError").textContent = error.message;
+    button.disabled = false;
+  }
 });
-$("#rollButton").addEventListener("click", () => { if (onlineRoom) rollOnlineDice(); else rollDice(); });
+$("#rollButton").addEventListener("click", () => {
+  if (game.over) { resetToSetup(); return; }
+  if (onlineRoom) rollOnlineDice();
+  else rollDice();
+});
 $("#adminPlayerId").textContent = playerId;
 $("#topupPlayerId").value = playerId;
 $("#manualTopup").addEventListener("click", async () => {
