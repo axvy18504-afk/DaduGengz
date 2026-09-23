@@ -71,7 +71,7 @@ function updatePot() {
 
 async function refreshBalance() {
   try {
-    const response = await fetch(`/api/balance/${encodeURIComponent(playerId)}`);
+    const response = await fetch(`/api/balance/${encodeURIComponent(playerId)}`, { cache: "no-store" });
     const data = await response.json();
     $("#tokenBalance").textContent = data.tokens.toLocaleString("id-ID");
   } catch (_error) {
@@ -156,7 +156,7 @@ function leaveOnlineRoom() {
 async function syncOnlineRoom() {
   if (!onlineRoom) return;
   try {
-    const response = await fetch(`/api/rooms/${onlineRoom.code}`);
+    const response = await fetch(`/api/rooms/${onlineRoom.code}`, { cache: "no-store" });
     if (response.ok) renderOnlineRoom(await response.json());
   } catch (_error) {
     $("#roomStatus").textContent = "Koneksi terputus. Mencoba menyambung kembali...";
